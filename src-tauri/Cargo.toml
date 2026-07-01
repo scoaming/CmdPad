@@ -1,0 +1,24 @@
+[package]
+name = "cmdpad"
+version = "1.0.0"
+description = "智能命令便签管理器 - 基于使用频次自动排序"
+authors = ["CmdPad"]
+edition = "2021"
+
+[lib]
+name = "cmdpad_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+tokio = { version = "1", features = ["full"] }
+time = "0.3.36"
