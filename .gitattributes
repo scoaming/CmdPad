@@ -1,0 +1,23 @@
+# Auto-detect text files, store with LF in repo, convert to native on checkout
+* text=auto
+
+# Source code — always LF
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.svg text eol=lf
+
+# Windows-specific files — keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Tauri resources — binary, don't touch
+*.ico binary
+*.png binary
+*.icns binary
