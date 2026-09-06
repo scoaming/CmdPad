@@ -20,14 +20,14 @@
 
 | 快捷键 | 作用 |
 |--------|------|
-| `Ctrl+Shift+C` | 显示 / 隐藏 CmdPad |
+| `Ctrl+Alt+C` | 显示 / 隐藏 CmdPad（避开 Explorer「复制文件路径」与浏览器 DevTools 的 `Ctrl+Shift+C`） |
 | `Ctrl+N` | 快速新增命令 |
 
 ## ☁️ 云同步 & 手机端
 
 | 顶栏按钮 | 作用 |
 |---------|------|
-| ☁️（云上传图标） | 立即同步到 Notion；增/删/改/导入后 10 秒也会自动同步（复制计数不触发，避免频繁重写页面）。需要本机已安装 Node.js，脚本路径可用环境变量 `CMDSYNC_NOTION_SCRIPT` 覆盖 |
+| ☁️（云上传图标） | 立即同步到 Notion；增/删/改/导入后 10 秒也会自动同步（复制计数不触发，避免频繁重写页面）。内置同步脚本（`src-tauri/scripts/notion-sync.mjs`），使用前需设置环境变量 `NOTION_PAGE_ID`（目标 Notion 页面 ID）；令牌从 `NOTION_TOKEN` 环境变量或用户主目录 `.notion-token` 文件读取，**不入仓库**。也可用 `CMDSYNC_NOTION_SCRIPT` 指定自定义脚本路径 |
 | 📱（手机图标） | 配置 Cloudflare Worker 地址与访问令牌，一键上传命令库；手机浏览器打开 Worker 地址、输入令牌即可搜索 + 点卡片复制，也可「添加到主屏幕」当 App 用 |
 
 手机端部署指南见 [cloud/DEPLOY.md](cloud/DEPLOY.md)——Cloudflare Workers 免费版即可（¥0），数据经访问令牌保护，非公开可读。

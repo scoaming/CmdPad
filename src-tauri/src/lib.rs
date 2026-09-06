@@ -77,11 +77,13 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Register global shortcut: Ctrl+Shift+C to toggle CmdPad
+            // Register global shortcut: Ctrl+Alt+C to toggle CmdPad
+            // （不用 Ctrl+Shift+C：与 Explorer 复制文件路径、浏览器 DevTools 检查元素冲突；
+            //   不用 Ctrl+Shift+S：是 VS Code / Office 的另存为）
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
             let handle = app.handle().clone();
             app.global_shortcut()
-                .on_shortcut("Ctrl+Shift+C", move |_app, _shortcut, event| {
+                .on_shortcut("Ctrl+Alt+C", move |_app, _shortcut, event| {
                     // Only respond to key press, not release (prevents flicker)
                     if event.state() != ShortcutState::Pressed {
                         return;

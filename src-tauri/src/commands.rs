@@ -1,5 +1,6 @@
 use crate::storage::{self, days_to_date, Command, Settings};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 use uuid::Uuid;
 
 /// 生成北京时间（UTC+8，中国无夏令时固定偏移）的 ISO 8601 时间戳。
@@ -232,22 +233,36 @@ pub fn get_autostart() -> Result<bool, String> {
     Ok(output.status.success())
 }
 
-/// cmdpad-sync.mjs 同步脚本路径（幂等：Notion 内容与本地一致时直接跳过不写）。
-/// 可用环境变量 CMDSYNC_NOTION_SCRIPT 覆盖。
-#[cfg(windows)]
-const NOTION_SYNC_SCRIPT: &str = "C:\\Users\\ist\\daily-summary-tool\\cmdpad-sync.mjs";
-#[cfg(not(windows))]
-const NOTION_SYNC_SCRIPT: &str = "cmdpad-sync.mjs";
+/// 内置 Notion 同步脚本名（随应用打包在 scripts/ 资源目录）。
+const NOTION_SYNC_SCRIPT_NAME: &str = "notion-sync.mjs";
 
-/// 立即把 commands.json 同步到 Notion 页面（复用 daily-summary-tool 的同步脚本）。
+/// 立即把 commands.json 同步到 Notion 页面（内置脚本，幂等：内容一致时直接跳过）。
+/// 脚本需要环境变量 NOTION_PAGE_ID（目标页面 ID）与 Notion 令牌（NOTION_TOKEN 或 ~/.notion-token）。
 /// 返回脚本最后一行输出（如 "✅ 已同步（N 个代码块...）" 或 "✅ 一致，无需更新"）。
 #[tauri::command]
-pub async fn sync_to_notion() -> Result<String, String> {
-    let script = std::env::var("CMDSYNC_NOTION_SCRIPT")
-        .unwrap_or_else(|_| NOTION_SYNC_SCRIPT.to_string());
-    if !std::path::Path::new(&script).exists() {
-        return Err(format!("同步脚本不存在：{}", script));
+pub async fn sync_to_notion(app: tauri::AppHandle) -> Result<String, String> {
+    // 路径解析优先级：环境变量覆盖 → 应用资源目录 → 可执行文件同级目录
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(p) = std::env::var("CMDSYNC_NOTION_SCRIPT") {
+        candidates.push(std::path::PathBuf::from(p));
     }
+    if let Ok(dir) = app.path().resource_dir() {
+        candidates.push(dir.join("scripts").join(NOTION_SYNC_SCRIPT_NAME));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("scripts").join(NOTION_SYNC_SCRIPT_NAME));
+        }
+    }
+    let script = candidates
+        .into_iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| {
+            format!(
+                "未找到内置同步脚本 {}（可用环境变量 CMDSYNC_NOTION_SCRIPT 指定路径）",
+                NOTION_SYNC_SCRIPT_NAME
+            )
+        })?;
 
     // node 不在 PATH 时兜底常见安装位置（GUI 自启环境 PATH 可能不全）
     let mut candidates: Vec<String> = vec!["node".to_string()];

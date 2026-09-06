@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/v2/crates/tauri-config-schema/schema.json",
   "productName": "CmdPad",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "identifier": "com.cmdpad.app",
   "build": {
     "devUrl": "http://localhost:1420",
@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "resources": ["scripts/notion-sync.mjs"],
     "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
