@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CmdPad 命令便签</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <!-- 刻意不设 apple-mobile-web-app-capable / display:standalone：
+       iOS 18.3 独立模式键盘不弹（系统 bug），改用 browser 模式由 Safari 拉起保证键盘可用 -->
+  <meta name="theme-color" content="#0f172a">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #0f172a; color: #e2e8f0;
+      min-height: 100vh; /* 文档自然滚动——standalone 模式下键盘弹出的重要前提，勿改回固定 100% 高度布局 */
+    }
+    header {
+      position: sticky; top: 0; z-index: 5;
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 16px; background: #0f172a;
+      border-bottom: 1px solid rgba(51, 65, 85, .5);
+    }
+    header .logo {
+      width: 28px; height: 28px; border-radius: 8px; background: #2563eb;
+      display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    header h1 { font-size: 16px; font-weight: 700; }
+    header #meta { font-size: 10px; color: #64748b; margin-left: auto; text-align: right; }
+    header #refresh {
+      border: 0; background: #1e293b; color: #94a3b8; font-size: 12px;
+      padding: 6px 10px; border-radius: 8px;
+    }
+    header #refresh:active { background: #334155; }
+    #searchbar { padding: 10px 16px; background: #0f172a; border-bottom: 1px solid rgba(51, 65, 85, .35); }
+    #search {
+      width: 100%; padding: 10px 14px; font-size: 16px; /* 16px 防 iOS 聚焦自动缩放 */
+      background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+      color: #e2e8f0; outline: none;
+      -webkit-appearance: none; appearance: none;
+      -webkit-user-select: text; user-select: text;
+    }
+    #search:focus { border-color: rgba(59, 130, 246, .5); }
+    main { padding: 4px 16px 48px; }
+    .card {
+      background: rgba(30, 41, 59, .8); border: 1px solid rgba(51, 65, 85, .6);
+      border-radius: 12px; padding: 14px; margin-top: 12px;
+      position: relative; user-select: none;
+    }
+    .card:active { background: #1e293b; }
+    .card .title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .card h3 { font-size: 14px; font-weight: 600; color: #e2e8f0; word-break: break-all; }
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
+      background: #334155; color: #cbd5e1;
+    }
+    .badge.top1 { background: #eab308; color: #422006; }
+    .badge.top2 { background: #94a3b8; color: #0f172a; }
+    .badge.top3 { background: #b45309; color: #fff7ed; }
+    .card code {
+      display: block; font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+      background: rgba(2, 6, 23, .8); border: 1px solid rgba(51, 65, 85, .5);
+      border-radius: 8px; padding: 10px 12px; color: #cbd5e1;
+    }
+    .card .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .card .tag {
+      font-size: 10px; padding: 2px 6px; border-radius: 6px;
+      background: rgba(51, 65, 85, .5); color: #94a3b8; border: 1px solid rgba(71, 85, 105, .3);
+    }
+    .copied-tip {
+      position: absolute; inset: 0; border-radius: 12px;
+      background: rgba(15, 23, 42, .95); display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 600; color: #34d399;
+    }
+    .empty { text-align: center; padding: 80px 20px; color: #64748b; font-size: 14px; }
+    /* 令牌页：普通文档流（非 fixed 弹层），body 加 .authing 时只显示它 */
+    #gate {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; padding: 24px; background: #0f172a;
+    }
+    #gate p { font-size: 14px; color: #cbd5e1; }
+    #gate input {
+      width: 100%; max-width: 320px; padding: 12px 14px; font-size: 16px;
+      background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+      color: #e2e8f0; outline: none; text-align: center;
+      -webkit-user-select: text; user-select: text;
+    }
+    #gate button {
+      width: 100%; max-width: 320px; padding: 12px; font-size: 15px; font-weight: 600;
+      background: #2563eb; color: #fff; border: 0; border-radius: 10px;
+    }
+    #gate .err { font-size: 12px; color: #f87171; min-height: 16px; }
+    #gate .safari-tip {
+      font-size: 12px; color: #38bdf8; text-decoration: underline; margin-top: 10px;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="gate" class="hidden">
+    <p>输入访问令牌</p>
+    <input id="tokenInput" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="DATA_TOKEN">
+    <div class="err" id="gateErr"></div>
+    <button id="tokenOk">进入</button>
+  </div>
+
+  <div id="app" class="hidden">
+    <header>
+      <div class="logo">⚡</div>
+      <h1>CmdPad</h1>
+      <span id="meta"></span>
+      <button id="refresh">刷新</button>
+    </header>
+    <div id="searchbar">
+      <input id="search" type="text" enterkeyhint="search" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="搜索标题 / 命令 / 标签">
+    </div>
+    <main id="list"></main>
+  </div>
+
+  <script>
+    var TOKEN_KEY = "cmdpad_token";
+    var DATA_KEY = "cmdpad_data";
+    var state = { commands: [], exportedAt: null, token: localStorage.getItem(TOKEN_KEY) || "" };
+
+    // iOS standalone PWA：原生点按可能不触发聚焦/键盘，在同一手势内对输入框同步补 focus()
+    // （必须同步调用——setTimeout 会脱离手势窗口导致 focus 无效）
+    function refocus(ev) {
+      var t = ev.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) {
+        try { t.focus(); } catch (e) { /* ignore */ }
+      }
+    }
+    ["touchstart", "touchend", "click"].forEach(function (evt) {
+      document.addEventListener(evt, refocus, { passive: true });
+    });
+
+    // 显示时间一律转成手机本地时区（数据源是 UTC ISO 字符串）
+    function fmtTime(iso) {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      function p(n) { return (n < 10 ? "0" : "") + n; }
+      return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " +
+        p(d.getHours()) + ":" + p(d.getMinutes());
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      // iOS 旧版兜底
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    }
+
+    function render() {
+      var q = document.getElementById("search").value.trim().toLowerCase();
+      var list = state.commands.filter(function (c) {
+        if (!q) return true;
+        return (c.title || "").toLowerCase().indexOf(q) >= 0
+          || (c.command || "").toLowerCase().indexOf(q) >= 0
+          || (c.tags || []).some(function (t) { return (t || "").toLowerCase().indexOf(q) >= 0; });
+      });
+      list.sort(function (a, b) {
+        return (b.usage_count || 0) - (a.usage_count || 0)
+          || String(a.title || "").localeCompare(String(b.title || ""));
+      });
+
+      var meta = document.getElementById("meta");
+      meta.innerHTML = state.commands.length + " 条" +
+        (state.exportedAt ? "<br>同步于 " + escapeHtml(fmtTime(state.exportedAt)) : "");
+
+      var box = document.getElementById("list");
+      if (list.length === 0) {
+        box.innerHTML = '<div class="empty">' + (state.commands.length === 0
+          ? "暂无命令，请在电脑端 CmdPad 上传"
+          : "没有匹配的命令") + "</div>";
+        return;
+      }
+      box.innerHTML = list.map(function (c, i) {
+        var badge = "";
+        if (i < 3 && (c.usage_count || 0) > 0) {
+          badge = '<span class="badge top' + (i + 1) + '">' + (i + 1) + "</span>";
+        } else if ((c.usage_count || 0) > 0) {
+          badge = '<span class="badge">' + c.usage_count + " 次</span>";
+        }
+        var tags = (c.tags || []).length
+          ? '<div class="tags">' + c.tags.map(function (t) { return '<span class="tag">#' + escapeHtml(t) + "</span>"; }).join("") + "</div>"
+          : "";
+        return '<div class="card" data-cmd="' + escapeHtml(c.command) + '">' +
+          '<div class="title-row"><h3>' + escapeHtml(c.title || "未命名") + "</h3>" + badge + "</div>" +
+          "<code>" + escapeHtml(c.command) + "</code>" + tags +
+          '<div class="copied-tip hidden">✓ 已复制，去粘贴吧</div></div>';
+      }).join("");
+    }
+
+    function showGate(err) {
+      document.getElementById("gate").classList.remove("hidden");
+      document.getElementById("app").classList.add("hidden");
+      document.getElementById("gateErr").textContent = err || "";
+    }
+
+    function hideGate() {
+      document.getElementById("gate").classList.add("hidden");
+      document.getElementById("app").classList.remove("hidden");
+    }
+
+    function applyData(data) {
+      state.commands = data.commands || [];
+      state.exportedAt = data.exported_at || null;
+      localStorage.setItem(DATA_KEY, JSON.stringify(data));
+      render();
+    }
+
+    function loadData() {
+      return fetch("/api/data", { headers: { "x-token": state.token } })
+        .then(function (res) {
+          if (res.status === 401) {
+            localStorage.removeItem(TOKEN_KEY); state.token = "";
+            showGate("令牌不正确，请重新输入");
+            throw new Error("unauthorized");
+          }
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(function (data) { applyData(data); });
+    }
+
+    document.getElementById("tokenOk").addEventListener("click", function () {
+      var v = document.getElementById("tokenInput").value.trim();
+      if (!v) return;
+      state.token = v;
+      document.getElementById("gateErr").textContent = "";
+      loadData()
+        .then(function () {
+          localStorage.setItem(TOKEN_KEY, v);
+          hideGate();
+        })
+        .catch(function (e) {
+          if (e.message !== "unauthorized") showGate("加载失败：" + e.message + "，请检查网络后重试");
+        });
+    });
+
+    document.getElementById("refresh").addEventListener("click", function () {
+      loadData().catch(function (e) {
+        if (e.message !== "unauthorized") alert("刷新失败：" + e.message);
+      });
+    });
+
+    document.getElementById("search").addEventListener("input", render);
+
+    // 点卡片 = 复制命令
+    document.getElementById("list").addEventListener("click", function (ev) {
+      var card = ev.target.closest(".card");
+      if (!card) return;
+      copyText(card.getAttribute("data-cmd")).then(function () {
+        var tip = card.querySelector(".copied-tip");
+        if (!tip) return;
+        tip.classList.remove("hidden");
+        setTimeout(function () { tip.classList.add("hidden"); }, 1200);
+      });
+    });
+
+    // 离线兜底：先用缓存渲染，再尝试联网刷新
+    try {
+      var cached = localStorage.getItem(DATA_KEY);
+      if (cached) {
+        state.commands = JSON.parse(cached).commands || [];
+        state.exportedAt = JSON.parse(cached).exported_at || null;
+      }
+    } catch (e) { /* ignore */ }
+    render();
+
+    if (state.token) {
+      hideGate();
+      loadData().catch(function (e) {
+        if (e.message !== "unauthorized") console.warn("离线或网络异常，展示缓存数据", e);
+      });
+    } else {
+      showGate("");
+    }
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(function () { /* ignore */ });
+    }
+  </script>
+</body>
+</html>

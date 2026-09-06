@@ -22,3 +22,6 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# 本地总结文档（含个人环境信息，不入公开仓库）
+md_summary/

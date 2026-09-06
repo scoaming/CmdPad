@@ -1,12 +1,14 @@
-use crate::storage::{self, Command, Settings};
+use crate::storage::{self, days_to_date, Command, Settings};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+/// 生成北京时间（UTC+8，中国无夏令时固定偏移）的 ISO 8601 时间戳。
+/// 旧数据是 UTC（Z 结尾），新数据带 +08:00 后缀；两者字典序比较仍保持时间先后正确。
 fn now_iso8601() -> String {
     let dur = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
-    let secs = dur.as_secs();
+    let secs = dur.as_secs() + 8 * 3600; // UTC + 8h = 北京时间墙上时钟
     let nanos = dur.subsec_nanos();
 
     let days = secs / 86400;
@@ -18,7 +20,7 @@ fn now_iso8601() -> String {
     let (year, month, day) = days_to_date(days as i64);
 
     format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}+08:00",
         year,
         month,
         day,
@@ -27,20 +29,6 @@ fn now_iso8601() -> String {
         seconds,
         nanos / 1_000_000
     )
-}
-
-fn days_to_date(mut days: i64) -> (i64, u32, u32) {
-    days += 719468;
-    let era = if days >= 0 { days } else { days - 146096 } / 146097;
-    let doe = days - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
 }
 
 #[tauri::command]
@@ -242,4 +230,95 @@ pub fn get_autostart() -> Result<bool, String> {
         .output()
         .map_err(|e| e.to_string())?;
     Ok(output.status.success())
+}
+
+/// cmdpad-sync.mjs 同步脚本路径（幂等：Notion 内容与本地一致时直接跳过不写）。
+/// 可用环境变量 CMDSYNC_NOTION_SCRIPT 覆盖。
+#[cfg(windows)]
+const NOTION_SYNC_SCRIPT: &str = "C:\\Users\\ist\\daily-summary-tool\\cmdpad-sync.mjs";
+#[cfg(not(windows))]
+const NOTION_SYNC_SCRIPT: &str = "cmdpad-sync.mjs";
+
+/// 立即把 commands.json 同步到 Notion 页面（复用 daily-summary-tool 的同步脚本）。
+/// 返回脚本最后一行输出（如 "✅ 已同步（N 个代码块...）" 或 "✅ 一致，无需更新"）。
+#[tauri::command]
+pub async fn sync_to_notion() -> Result<String, String> {
+    let script = std::env::var("CMDSYNC_NOTION_SCRIPT")
+        .unwrap_or_else(|_| NOTION_SYNC_SCRIPT.to_string());
+    if !std::path::Path::new(&script).exists() {
+        return Err(format!("同步脚本不存在：{}", script));
+    }
+
+    // node 不在 PATH 时兜底常见安装位置（GUI 自启环境 PATH 可能不全）
+    let mut candidates: Vec<String> = vec!["node".to_string()];
+    #[cfg(windows)]
+    {
+        if let Some(pf) = std::env::var_os("ProgramFiles") {
+            candidates.push(
+                std::path::PathBuf::from(pf)
+                    .join("nodejs")
+                    .join("node.exe")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+        if let Some(lap) = std::env::var_os("LOCALAPPDATA") {
+            candidates.push(
+                std::path::PathBuf::from(lap)
+                    .join("Programs")
+                    .join("nodejs")
+                    .join("node.exe")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+    }
+
+    let last_err = "未找到 node，请确认已安装 Node.js 并加入 PATH".to_string();
+    for cand in candidates {
+        let mut cmd = tokio::process::Command::new(&cand);
+        cmd.arg(&script)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true); // 超时丢弃 future 时顺带杀掉子进程
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW，避免弹出控制台
+
+        match cmd.spawn() {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("启动同步脚本失败：{}", e)),
+            Ok(child) => {
+                let output = tokio::time::timeout(
+                    std::time::Duration::from_secs(180),
+                    child.wait_with_output(),
+                )
+                .await;
+                match output {
+                    Err(_) => return Err("同步超时（180 秒），请检查网络".to_string()),
+                    Ok(Err(e)) => return Err(format!("执行同步脚本失败：{}", e)),
+                    Ok(Ok(out)) => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        if out.status.success() {
+                            let last = stdout
+                                .lines()
+                                .filter(|l| !l.trim().is_empty())
+                                .next_back()
+                                .unwrap_or("同步完成")
+                                .to_string();
+                            return Ok(last);
+                        }
+                        let last = stderr
+                            .lines()
+                            .filter(|l| !l.trim().is_empty())
+                            .next_back()
+                            .unwrap_or("同步失败")
+                            .to_string();
+                        return Err(format!("同步失败：{}", last));
+                    }
+                }
+            }
+        }
+    }
+    Err(last_err)
 }

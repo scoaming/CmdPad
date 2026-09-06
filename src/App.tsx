@@ -1,11 +1,12 @@
-import { useEffect, useCallback, useRef } from "react";
-import { Plus, Download, Zap, ZapOff, Power } from "lucide-react";
+import { useEffect, useCallback, useRef, useState } from "react";
+import { Plus, Download, Zap, ZapOff, Power, CloudUpload, Loader2, Check, Smartphone } from "lucide-react";
 import { useStore } from "./store/useStore";
 import { getLastKnownText, setLastKnownText } from "./utils/clipboardState";
 import SearchBar from "./components/SearchBar";
 import CommandCard from "./components/CommandCard";
 import AddCommandForm from "./components/AddCommandForm";
 import ImportDialog from "./components/ImportDialog";
+import CloudSyncDialog from "./components/CloudSyncDialog";
 
 export default function App() {
   const {
@@ -15,6 +16,8 @@ export default function App() {
     showAddForm,
     showImportDialog,
     editingCommand,
+    syncStatus,
+    syncMessage,
     loadCommands,
     loadSettings,
     setShowAddForm,
@@ -23,10 +26,12 @@ export default function App() {
     incrementUsage,
     updateSettings,
     toggleAutoStart,
+    syncNotion,
   } = useStore();
 
   const filteredCommands = getFilteredCommands();
   const clipboardTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showCloudDialog, setShowCloudDialog] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -161,6 +166,43 @@ export default function App() {
             )}
           </button>
 
+          {/* Notion sync */}
+          <button
+            onClick={() => syncNotion()}
+            disabled={syncStatus === "running"}
+            className={`p-2 rounded-lg transition-all text-xs disabled:cursor-wait ${
+              syncStatus === "running"
+                ? "bg-blue-500/20 text-blue-400"
+                : syncStatus === "ok"
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : syncStatus === "fail"
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-slate-800 text-slate-500 hover:text-slate-300"
+            }`}
+            title={
+              syncMessage
+                ? `同步到 Notion：${syncMessage}`
+                : "立即同步到 Notion（增删改命令后也会自动同步）"
+            }
+          >
+            {syncStatus === "running" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : syncStatus === "ok" ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <CloudUpload className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Mobile PWA (Cloudflare) */}
+          <button
+            onClick={() => setShowCloudDialog(true)}
+            className="p-2 rounded-lg transition-all text-xs bg-slate-800 text-slate-500 hover:text-slate-300"
+            title="手机端同步（Cloudflare PWA）"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+
           {/* Import button */}
           <button
             onClick={() => setShowImportDialog(true)}
@@ -228,6 +270,9 @@ export default function App() {
 
       {/* Import dialog */}
       {showImportDialog && <ImportDialog />}
+
+      {/* Cloud sync dialog (mobile PWA) */}
+      {showCloudDialog && <CloudSyncDialog onClose={() => setShowCloudDialog(false)} />}
     </div>
   );
 }

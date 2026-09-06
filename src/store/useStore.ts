@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Command, Settings, SortBy } from "../types";
 import { setLastKnownText } from "../utils/clipboardState";
 
+type SyncStatus = "idle" | "running" | "ok" | "fail";
+
 interface AppState {
   commands: Command[];
   settings: Settings;
@@ -11,6 +13,8 @@ interface AppState {
   showAddForm: boolean;
   showImportDialog: boolean;
   editingCommand: Command | null;
+  syncStatus: SyncStatus;
+  syncMessage: string;
 
   // Actions
   loadCommands: () => Promise<void>;
@@ -23,12 +27,17 @@ interface AppState {
   importCommands: (commands: Command[]) => Promise<number>;
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
   toggleAutoStart: () => Promise<void>;
+  syncNotion: () => Promise<void>;
+  scheduleAutoSync: () => void;
   setSearchQuery: (query: string) => void;
   setShowAddForm: (show: boolean) => void;
   setShowImportDialog: (show: boolean) => void;
   setEditingCommand: (cmd: Command | null) => void;
   getFilteredCommands: () => Command[];
 }
+
+// 自动同步去抖定时器（数据变更后 10 秒无新变更才真正同步）
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useStore = create<AppState>((set, get) => ({
   commands: [],
@@ -42,6 +51,8 @@ export const useStore = create<AppState>((set, get) => ({
   showAddForm: false,
   showImportDialog: false,
   editingCommand: null,
+  syncStatus: "idle" as SyncStatus,
+  syncMessage: "",
 
   loadCommands: async () => {
     try {
@@ -67,6 +78,7 @@ export const useStore = create<AppState>((set, get) => ({
       await invoke("add_command", { title, command, tags });
       await get().loadCommands();
       set({ showAddForm: false });
+      get().scheduleAutoSync();
     } catch (err) {
       console.error("添加命令失败:", err);
     }
@@ -77,6 +89,7 @@ export const useStore = create<AppState>((set, get) => ({
       await invoke("update_command", { id, title, command, tags });
       await get().loadCommands();
       set({ editingCommand: null });
+      get().scheduleAutoSync();
     } catch (err) {
       console.error("更新命令失败:", err);
     }
@@ -86,6 +99,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await invoke("delete_command", { id });
       await get().loadCommands();
+      get().scheduleAutoSync();
     } catch (err) {
       console.error("删除命令失败:", err);
     }
@@ -128,6 +142,7 @@ export const useStore = create<AppState>((set, get) => ({
       });
       await get().loadCommands();
       set({ showImportDialog: false });
+      get().scheduleAutoSync();
       return added.length;
     } catch (err) {
       console.error("导入命令失败:", err);
@@ -166,6 +181,33 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (err) {
       console.error("切换自启动失败:", err);
     }
+  },
+
+  syncNotion: async () => {
+    if (get().syncStatus === "running") return;
+    set({ syncStatus: "running", syncMessage: "" });
+    try {
+      const msg = await invoke<string>("sync_to_notion");
+      set({ syncStatus: "ok", syncMessage: msg });
+    } catch (err) {
+      console.error("同步 Notion 失败:", err);
+      set({ syncStatus: "fail", syncMessage: String(err) });
+    } finally {
+      // 4 秒后恢复图标状态（消息保留在 tooltip 里）
+      setTimeout(() => {
+        if (get().syncStatus !== "running") {
+          set({ syncStatus: "idle" });
+        }
+      }, 4000);
+    }
+  },
+
+  scheduleAutoSync: () => {
+    if (autoSyncTimer) clearTimeout(autoSyncTimer);
+    autoSyncTimer = setTimeout(() => {
+      autoSyncTimer = null;
+      get().syncNotion();
+    }, 10_000);
   },
 
   setSearchQuery: (query) => set({ searchQuery: query }),

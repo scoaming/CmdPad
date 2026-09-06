@@ -1,0 +1,15 @@
+{
+  "name": "CmdPad 命令便签",
+  "short_name": "CmdPad",
+  "description": "CmdPad 手机端：查看 / 搜索 / 一键复制常用命令",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/icon-128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

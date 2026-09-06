@@ -10,6 +10,17 @@ use tauri::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 单实例：二次启动时把已有主窗口拉到前台后退出新进程，
+        // 避免双开同时写 commands.json 互相覆盖
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_always_on_top(true);
+                let _ = window.set_focus();
+                let _ = window.set_always_on_top(false);
+            }
+        }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
@@ -109,6 +120,7 @@ pub fn run() {
             commands::update_settings,
             commands::set_autostart,
             commands::get_autostart,
+            commands::sync_to_notion,
         ])
         .run(tauri::generate_context!())
         .expect("启动 CmdPad 失败");

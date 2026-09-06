@@ -1,0 +1,11 @@
+name = "cmdpad-web"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+# PWA 静态资源目录（index.html / sw.js / manifest / 图标）
+assets = { directory = "./public" }
+
+# KV 存储：CmdPad 上传的命令数据。id 在部署时替换（见 DEPLOY.md 第 3 步）
+[[kv_namespaces]]
+binding = "CMDPAD_KV"
+id = "0856750db3394450b78ef3fc8c5a64ec"
