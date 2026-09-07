@@ -102,6 +102,16 @@ pub fn run() {
                 })
                 .ok();
 
+            // 自启动自愈：NSIS 覆盖安装的卸载阶段会清掉 HKCU Run 键（而应用只在切换开关时写键），
+            // 启动时发现设置要求自启但注册表缺失，则静默补写
+            std::thread::spawn(|| {
+                if commands::get_settings().auto_start {
+                    if let Ok(false) = commands::get_autostart() {
+                        let _ = commands::set_autostart(true);
+                    }
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {

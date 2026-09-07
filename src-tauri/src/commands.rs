@@ -323,13 +323,23 @@ pub async fn sync_to_notion(app: tauri::AppHandle) -> Result<String, String> {
                                 .to_string();
                             return Ok(last);
                         }
-                        let last = stderr
+                        // 取 stderr 尾部多行：node 崩溃时尾行只是版本号，Error 信息在倒数几行
+                        let tail: Vec<String> = stderr
                             .lines()
                             .filter(|l| !l.trim().is_empty())
-                            .next_back()
-                            .unwrap_or("同步失败")
-                            .to_string();
-                        return Err(format!("同步失败：{}", last));
+                            .rev()
+                            .take(4)
+                            .map(|s| s.to_string())
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect();
+                        let msg = if tail.is_empty() {
+                            "无错误输出，详见日志".to_string()
+                        } else {
+                            tail.join(" ｜ ")
+                        };
+                        return Err(format!("同步失败：{}", msg));
                     }
                 }
             }

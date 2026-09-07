@@ -34,6 +34,16 @@ function log(msg) {
   try { appendFileSync(LOG_FILE, `[${bjTime()}] ${msg}\n`, 'utf8') } catch { /* ignore */ }
 }
 
+/** 崩溃兜底：任何未捕获异常先写日志再退出——Rust 端只能拿到 stderr 尾行，日志是诊断关键 */
+function fail(e) {
+  const msg = e?.stack ?? String(e)
+  try { appendFileSync(LOG_FILE, `[${bjTime()}] 💥 崩溃: ${msg}\n`, 'utf8') } catch { /* ignore */ }
+  console.error(msg)
+  process.exitCode = 1 // 自然退出让 stderr 完整冲刷到管道；process.exit 会截断输出
+}
+process.on('uncaughtException', fail)
+process.on('unhandledRejection', fail)
+
 function loadToken() {
   if (process.env.NOTION_TOKEN) return process.env.NOTION_TOKEN
   try {
@@ -118,10 +128,11 @@ function chunkText(text) {
 }
 
 async function main() {
-  if (!PAGE) {
-    throw new Error('未设置 NOTION_PAGE_ID 环境变量（值为目标 Notion 页面 ID）')
-  }
   const dontWrite = process.argv.includes('--dont-write')
+  log(`▶ 启动（PAGE_ID ${PAGE ? '已设置' : '未设置'}${dontWrite ? '，预览模式' : ''}）`)
+  if (!PAGE) {
+    throw new Error('未设置 NOTION_PAGE_ID 环境变量（值为目标 Notion 页面 ID）。安装后请重启 CmdPad 使其读到该变量')
+  }
   const st = statSync(FILE, { throwIfNoEntry: false })
   if (!st?.isFile()) throw new Error(`找不到 ${FILE}`)
   const T = JSON.stringify(JSON.parse(readFileSync(FILE, 'utf8')), null, 2)
@@ -170,4 +181,4 @@ async function main() {
   log('✅ 已同步（' + chunks.length + ' 个代码块 / ' + children.length + ' 块；时间 ' + bjTime() + ' 北京时间，文件修改 ' + bjTime(new Date(st.mtimeMs)) + '）')
 }
 
-main().catch(e => { console.error(e); process.exit(1) })
+main().catch(fail)
