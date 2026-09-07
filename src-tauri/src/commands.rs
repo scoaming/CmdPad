@@ -179,6 +179,7 @@ pub fn update_settings(
 
 #[tauri::command]
 pub fn set_autostart(enable: bool) -> Result<bool, String> {
+    use std::os::windows::process::CommandExt;
     let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_str = exe_path.to_string_lossy().to_string();
 
@@ -193,6 +194,7 @@ pub fn set_autostart(enable: bool) -> Result<bool, String> {
                 &format!("\"{}\"", exe_str),
                 "/f",
             ])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW：GUI 进程里调 reg.exe 不闪终端窗
             .output()
             .map_err(|e| e.to_string())?;
         if output.status.success() {
@@ -209,6 +211,7 @@ pub fn set_autostart(enable: bool) -> Result<bool, String> {
                 "CmdPad",
                 "/f",
             ])
+            .creation_flags(0x0800_0000)
             .output()
             .map_err(|e| e.to_string())?;
         if output.status.success() {
@@ -221,6 +224,7 @@ pub fn set_autostart(enable: bool) -> Result<bool, String> {
 
 #[tauri::command]
 pub fn get_autostart() -> Result<bool, String> {
+    use std::os::windows::process::CommandExt;
     let output = std::process::Command::new("reg")
         .args([
             "query",
@@ -228,6 +232,7 @@ pub fn get_autostart() -> Result<bool, String> {
             "/v",
             "CmdPad",
         ])
+        .creation_flags(0x0800_0000)
         .output()
         .map_err(|e| e.to_string())?;
     Ok(output.status.success())
