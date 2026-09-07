@@ -236,6 +236,20 @@ pub fn get_autostart() -> Result<bool, String> {
 /// 内置 Notion 同步脚本名（随应用打包在 scripts/ 资源目录）。
 const NOTION_SYNC_SCRIPT_NAME: &str = "notion-sync.mjs";
 
+/// 把 Rust 侧同步诊断信息追加到 notion-sync.log（与脚本共用日志，便于对照排查）
+fn append_sync_log(data_dir: Option<&std::path::Path>, msg: &str) {
+    use std::io::Write;
+    let Some(dir) = data_dir else { return };
+    let path = dir.join("notion-sync.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "[{}][Rust] {}", now_iso8601(), msg);
+    }
+}
+
 /// 立即把 commands.json 同步到 Notion 页面（内置脚本，幂等：内容一致时直接跳过）。
 /// 脚本需要环境变量 NOTION_PAGE_ID（目标页面 ID）与 Notion 令牌（NOTION_TOKEN 或 ~/.notion-token）。
 /// 返回脚本最后一行输出（如 "✅ 已同步（N 个代码块...）" 或 "✅ 一致，无需更新"）。
@@ -263,6 +277,32 @@ pub async fn sync_to_notion(app: tauri::AppHandle) -> Result<String, String> {
                 NOTION_SYNC_SCRIPT_NAME
             )
         })?;
+
+    // 复制脚本到应用数据目录（C 盘用户路径、无空格）再执行：
+    // 脚本位于 Program Files 时曾被安全软件拦截导致 node 加载即崩
+    // （v1.1.1 起脚本在 D:\Program Files 下必现崩溃，位于 C:\Users\... 时正常）
+    let data_dir = app.path().app_data_dir().ok();
+    let script = match &data_dir {
+        Some(dir) => {
+            let dest = dir.join(NOTION_SYNC_SCRIPT_NAME);
+            // fs::copy 直接覆盖旧副本，保证始终与安装版本一致；失败则退回原路径
+            match std::fs::copy(&script, &dest) {
+                Ok(_) => dest,
+                Err(_) => script,
+            }
+        }
+        None => script,
+    };
+    append_sync_log(
+        data_dir.as_deref(),
+        &format!(
+            "启动同步：script={}，cwd={}",
+            script.display(),
+            std::env::current_dir()
+                .map(|d| d.display().to_string())
+                .unwrap_or_else(|_| "?".to_string())
+        ),
+    );
 
     // node 不在 PATH 时兜底常见安装位置（GUI 自启环境 PATH 可能不全）
     let mut candidates: Vec<String> = vec!["node".to_string()];
@@ -300,7 +340,10 @@ pub async fn sync_to_notion(app: tauri::AppHandle) -> Result<String, String> {
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW，避免弹出控制台
 
         match cmd.spawn() {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                append_sync_log(data_dir.as_deref(), &format!("node={} 未找到，尝试下一候选", cand));
+                continue;
+            }
             Err(e) => return Err(format!("启动同步脚本失败：{}", e)),
             Ok(child) => {
                 let output = tokio::time::timeout(
@@ -323,6 +366,16 @@ pub async fn sync_to_notion(app: tauri::AppHandle) -> Result<String, String> {
                                 .to_string();
                             return Ok(last);
                         }
+                        // 完整 stderr 落日志：node 崩溃时 stderr 是诊断的唯一线索
+                        append_sync_log(
+                            data_dir.as_deref(),
+                            &format!(
+                                "node={} exit={:?} stderr全文：\n{}",
+                                cand,
+                                out.status.code(),
+                                stderr
+                            ),
+                        );
                         // 取 stderr 尾部多行：node 崩溃时尾行只是版本号，Error 信息在倒数几行
                         let tail: Vec<String> = stderr
                             .lines()
