@@ -32,6 +32,14 @@ export default function App() {
   const filteredCommands = getFilteredCommands();
   const clipboardTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showCloudDialog, setShowCloudDialog] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    import("@tauri-apps/api/app")
+      .then((m) => m.getVersion())
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
 
   // Load data on mount
   useEffect(() => {
@@ -123,6 +131,11 @@ export default function App() {
           <span className="text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
             {commands.length} 条命令
           </span>
+          {appVersion && (
+            <span className="text-[10px] text-slate-600" title="当前版本">
+              v{appVersion}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">

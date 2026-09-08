@@ -40,7 +40,10 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(icon)
                 .menu(&menu)
-                .tooltip("CmdPad - 智能命令便签")
+                .tooltip(format!(
+                    "CmdPad v{} - 智能命令便签",
+                    env!("CARGO_PKG_VERSION")
+                ))
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {
                         "show" => {
