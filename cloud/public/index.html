@@ -6,8 +6,12 @@
   <title>CmdPad 命令便签</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <!-- 刻意不设 apple-mobile-web-app-capable / display:standalone：
-       iOS 18.3 独立模式键盘不弹（系统 bug），改用 browser 模式由 Safari 拉起保证键盘可用 -->
+  <!-- iOS 独立应用模式：无浏览器地址栏，像原生 App。
+       注意：iOS 18.3 独立模式曾出现键盘不弹的系统级 bug（2026-09-07 确认重启手机可恢复），
+       若复发先重启手机，仍不行可临时改回 browser 模式（删掉下面两行 meta + manifest display 改 browser） -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="CmdPad">
   <meta name="theme-color" content="#0f172a">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }

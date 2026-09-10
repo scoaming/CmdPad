@@ -3,7 +3,7 @@
  * - 其余静态资源（manifest/图标）：缓存优先
  * - /api/* 数据：不经过 SW，走网络 + localStorage 兜底
  */
-var CACHE = "cmdpad-shell-v5";
+var CACHE = "cmdpad-shell-v6";
 var SHELL = ["/", "/manifest.webmanifest", "/apple-touch-icon.png"];
 
 self.addEventListener("install", function (e) {
